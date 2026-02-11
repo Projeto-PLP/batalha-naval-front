@@ -5,11 +5,9 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { isAuthenticated } from '@/lib/utils';
-import { authService } from '@/services/authService';
-import { Button } from '@/components/ui/Button';
 import { useUserProfile } from '@/hooks/queries/useUserProfile';
 import { useAuth } from '@/providers/AuthProvider';
-import { log } from 'console';
+import { UserMenu } from '@/components/ui/UserMenu';
 
 export default function DashboardLayout({
   children,
@@ -36,46 +34,18 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-naval-bg">
       {/* Header */}
-      <header className="bg-blue-900 text-white shadow-lg">
+      <header className="bg-naval-surface text-white shadow-lg border-b border-naval-border">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-6">
-            <h1 className="text-2xl font-bold">⚓ Batalha Naval</h1>
-            <nav className="flex space-x-4">
-              <Link
-                href="/lobby"
-                className="hover:bg-blue-800 px-3 py-2 rounded transition"
-              >
-                Lobby
-              </Link>
-              <Link
-                href="/profile"
-                className="hover:bg-blue-800 px-3 py-2 rounded transition"
-              >
-                Perfil
-              </Link>
-            </nav>
-          </div>
+          {/* Logo - Clickable */}
+          <Link href="/lobby" className="hover:opacity-80 transition-opacity">
+            <h1 className="text-2xl font-bold cursor-pointer">⚓ Batalha Naval</h1>
+          </Link>
           
-          {/* User Menu */}
-          <div className="flex items-center space-x-4">
-            {user && (
-              <div className="text-right">
-                <div className="font-semibold">{user.username}</div>
-                <div className="text-xs text-blue-200">
-                  {user.wins}V - {user.losses}D
-                </div>
-              </div>
-            )}
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              size="sm"
-              className="text-white border-white hover:bg-blue-800"
-            >
-              Sair
-            </Button>
+          {/* User Menu Dropdown */}
+          <div className="flex items-center">
+            {user && <UserMenu user={user} onLogout={handleLogout} />}
           </div>
         </div>
       </header>

@@ -107,7 +107,15 @@ export default function ProfilePage() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Page Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="mb-8">
+        <Button
+          variant="outline"
+          onClick={() => router.push('/lobby')}
+          className="flex items-center gap-2 mb-4"
+        >
+          <span>←</span>
+          <span>Voltar ao Lobby</span>
+        </Button>
         <div>
           <h1 className="text-4xl font-bold text-white tracking-tight">
             Perfil do Comandante
@@ -116,12 +124,6 @@ export default function ProfilePage() {
             Sua carreira e conquistas
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => router.push('/lobby')}
-        >
-          ← Voltar ao Lobby
-        </Button>
       </div>
 
       {/* Player Identity Card */}
