@@ -111,8 +111,20 @@ export const GameModeSelector: React.FC = () => {
 
       // Redireciona usando o ID retornado
       router.push(`/match/${match.matchId}`);
+<<<<<<< Updated upstream
     } catch (error) {
       console.error("Erro ao iniciar treinamento:", error);
+=======
+    } catch (error: unknown) {
+      // Extrai detalhes reais do erro (AxiosError serializa como "{}")
+      if (error instanceof Error) {
+        console.error('Erro ao iniciar treinamento:', error.message, error);
+      } else if (typeof error === 'object' && error !== null) {
+        console.error('Erro ao iniciar treinamento:', JSON.stringify(error, null, 2));
+      } else {
+        console.error('Erro ao iniciar treinamento:', error);
+      }
+>>>>>>> Stashed changes
     }
   };
 

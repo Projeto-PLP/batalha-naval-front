@@ -1,232 +1,432 @@
-"use client";
+/**
+ * SetupPhase — Drag-and-drop ship placement orchestrator.
+ *
+ * Integrates:
+ *  • `@dnd-kit/core` for drag interactions (Mouse + Touch sensors).
+ *  • `useSetupStore` for placement logic & validation.
+ *  • Visual components: SetupGrid, DroppableCell, DraggableShip, ShipUnit.
+ *  • Global 'R' key listener for rotating the active / selected ship.
+ *  • DragOverlay for a semi-transparent ship preview attached to the cursor.
+ */
+'use client';
 
-import { useRouter } from "next/navigation";
-import { Match } from "@/types/api-responses";
-import { useSetupStore } from "@/stores/useSetupStore";
-import { Grid } from "@/components/game/board/Grid";
-import { DraggableShip } from "@/components/game/ships/DraggableShip";
-import { GameControls } from "@/components/game/HUD/GameControls";
-import { Button } from "@/components/ui/Button";
-import { FLEET_COMPOSITION, GRID_SIZE, SHIP_SIZES } from "@/lib/constants";
-import { CellState, ShipOrientation } from "@/types/game-enums";
-import { useSetupMatchMutation } from "@/hooks/queries/useMatchMutations";
-import { useEffect } from "react";
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  DndContext,
+  DragOverlay,
+  DragStartEvent,
+  DragEndEvent,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+
+import { Match, SetupShipPayload } from '@/types/api-responses';
+import { CELL_SIZE, FLEET_CONFIG, GRID_SIZE } from '@/lib/game-rules';
+import {
+  useSetupStore,
+  type DockShip,
+  type PlacedShip,
+} from '@/stores/useSetupStore';
+import { useSetupMatchMutation } from '@/hooks/queries/useMatchMutations';
+
+import { SetupGrid } from '@/components/game/setup/SetupGrid';
+import { DroppableCell } from '@/components/game/setup/DroppableCell';
+import { DraggableShip } from '@/components/game/setup/DraggableShip';
+import { ShipUnit } from '@/components/game/setup/ShipUnit';
+import { Button } from '@/components/ui/Button';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Parse a droppable id like `cell-3-7` → { x: 3, y: 7 }. */
+function parseCellId(id: string): { x: number; y: number } | null {
+  const m = /^cell-(\d+)-(\d+)$/.exec(id);
+  if (!m) return null;
+  return { x: Number(m[1]), y: Number(m[2]) };
+}
+
+/** Find a ship (dock or board) by id. */
+function findShip(
+  id: string,
+  available: DockShip[],
+  placed: PlacedShip[],
+): DockShip | PlacedShip | undefined {
+  return available.find((s) => s.id === id) ?? placed.find((s) => s.id === id);
+}
+
+// ─── Props ───────────────────────────────────────────────────────────────────
 
 interface SetupPhaseProps {
   match: Match;
 }
 
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export default function SetupPhase({ match }: SetupPhaseProps) {
   const router = useRouter();
-  const {
-    ships,
-    selectedShip,
-    selectShip,
-    addShip,
-    rotateShip,
-    clearBoard,
-    isShipPlaced,
-    allShipsPlaced,
-  } = useSetupStore();
+
+  // ── Store ────────────────────────────────────────────────────────────────
+  const availableShips = useSetupStore((s) => s.availableShips);
+  const placedShips    = useSetupStore((s) => s.placedShips);
+  const placeShip      = useSetupStore((s) => s.placeShip);
+  const rotateShip     = useSetupStore((s) => s.rotateShip);
+  const removeShip     = useSetupStore((s) => s.removeShip);
+  const resetFleet     = useSetupStore((s) => s.resetFleet);
+  const allShipsPlaced = useSetupStore((s) => s.allShipsPlaced);
+
+  // ── Mutation ─────────────────────────────────────────────────────────────
+  const setupMatch = useSetupMatchMutation();
+
+  // ── Local UI state ───────────────────────────────────────────────────────
+  /** Id of the ship currently being dragged. */
+  const [activeId, setActiveId] = useState<string | null>(null);
+  /** Id of the currently "selected" ship (for click-to-place & rotation). */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /** The ship object corresponding to `activeId`. */
+  const activeShip = activeId
+    ? findShip(activeId, availableShips, placedShips)
+    : undefined;
+
+  // ── Sensors ──────────────────────────────────────────────────────────────
+  const mouseSensor = useSensor(MouseSensor, {
+    activationConstraint: { distance: 5 },
+  });
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: { delay: 150, tolerance: 5 },
+  });
+  const sensors = useSensors(mouseSensor, touchSensor);
+
+  // ── Clean-up on unmount ──────────────────────────────────────────────────
+  useEffect(() => {
+    return () => resetFleet();
+  }, [resetFleet]);
+
+  // ── Keyboard: 'R' to rotate ─────────────────────────────────────────────
+  // We track the "target" ship for rotation: activeId (while dragging) takes
+  // priority, otherwise we fall back to selectedId.
+  const rotationTarget = activeId ?? selectedId;
+  const rotationTargetRef = useRef(rotationTarget);
+  rotationTargetRef.current = rotationTarget;
 
   useEffect(() => {
-    return () => {
-      console.log("Limpando tabuleiro ");
-      clearBoard();
-    };
-  }, [clearBoard]);
-  // Hooks de Mutation
-  const setupMatch = useSetupMatchMutation();
-  //const confirmSetup = useConfirmSetupMutation(match.id);
-
-  // Inicializa grid vazio para renderização
-  const emptyGrid = Array(GRID_SIZE)
-    .fill(null)
-    .map(() => Array(GRID_SIZE).fill(CellState.WATER));
-
-  const renderGrid = () => {
-    // 1. Cria a base de água
-    const grid = emptyGrid.map((row) => [...row]);
-
-    // 2. Filtra APENAS os navios que estão no tabuleiro
-    const placedShips = ships.filter((s) => s.startRow >= 0 && s.startCol >= 0);
-
-    placedShips.forEach((ship) => {
-      const size = SHIP_SIZES[ship.type];
-      for (let i = 0; i < size; i++) {
-        const row =
-          ship.orientation === ShipOrientation.HORIZONTAL
-            ? ship.startRow
-            : ship.startRow + i;
-        const col =
-          ship.orientation === ShipOrientation.HORIZONTAL
-            ? ship.startCol + i
-            : ship.startCol;
-
-        // Proteção extra contra overflow do grid (ex: navio saindo pela borda)
-        if (grid[row] && grid[row][col] !== undefined) {
-          grid[row][col] = CellState.SHIP;
-        }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'r' || e.key === 'R') {
+        const id = rotationTargetRef.current;
+        if (id) rotateShip(id);
       }
-    });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [rotateShip]);
 
-    return grid;
-  };
+  // ── Validity highlights for the grid ─────────────────────────────────────
+  // Build a Map<"x,y", { isOver, isValid }> that SetupGrid can consume to
+  // colour cells while dragging.  We compute validity for every cell so the
+  // grid can show green / red under the full ship silhouette.
+  // (For now we pass `null` highlights — real-time preview would require
+  //  tracking the pointer position via DragMove which adds complexity.
+  //  DragOverlay already gives good visual feedback.)
 
-  const handleCellClick = (row: number, col: number) => {
-    if (!selectedShip) return;
+  // ── Drag handlers ────────────────────────────────────────────────────────
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  }, []);
 
-    const ship = ships.find((s) => s.type === selectedShip);
-    const orientation = ship?.orientation || ShipOrientation.HORIZONTAL;
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveId(null);
 
-    addShip({
-      type: selectedShip,
-      orientation: orientation,
-      startRow: row,
-      startCol: col,
-      size: SHIP_SIZES[selectedShip], // Tamanho real para validação no Store
-    });
-  };
+      if (!over) return; // dropped outside any cell
 
-  const handleRotate = () => {
-    if (selectedShip) {
-      rotateShip(selectedShip);
-    }
-  };
+      const coords = parseCellId(String(over.id));
+      if (!coords) return;
 
+      const shipId = String(active.id);
+      const ok = placeShip(shipId, coords.x, coords.y);
+
+      if (!ok) {
+        // Invalid drop — the store rejected it. The ship snaps back because
+        // the DragOverlay disappears and the origin copy becomes visible again.
+        console.warn(`Placement rejected for ${shipId} at (${coords.x}, ${coords.y})`);
+      }
+    },
+    [placeShip],
+  );
+
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null);
+  }, []);
+
+  // ── Click-to-place (fallback for non-drag interaction) ───────────────────
+  const handleCellClick = useCallback(
+    (x: number, y: number) => {
+      if (!selectedId) return;
+      const ok = placeShip(selectedId, x, y);
+      if (ok) setSelectedId(null);
+    },
+    [selectedId, placeShip],
+  );
+
+  // ── Error toast state ────────────────────────────────────────────────────
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Auto-dismiss error toast after 4 seconds
+  useEffect(() => {
+    if (!errorMsg) return;
+    const t = setTimeout(() => setErrorMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [errorMsg]);
+
+  // ── Confirm / submit fleet ───────────────────────────────────────────────
   /**
-   * Orchestrates the final submission:
-   * 1. Sends the map of ship positions.
-   * 2. Signals readiness to the backend.
+   * Maps `PlacedShip[]` → `SetupShipPayload[]` and sends to the backend.
+   *
+   * DTO mapping:
+   *   name        → ShipType enum value (e.g. "Porta-Aviões")
+   *   size        → number of cells
+   *   startX      → column (ship.x)
+   *   startY      → row    (ship.y)
+   *   orientation → ShipOrientation string ("Horizontal" | "Vertical")
    */
   const handleConfirm = async () => {
-    if (!allShipsPlaced()) {
-      alert("Comandante, posicione todos os navios antes de confirmar!");
-      return;
-    }
+    if (!allShipsPlaced()) return;
+
+    setErrorMsg(null);
 
     try {
-      // 1. Mapeamento para o formato do Backend (SetupMatchRequest)
-      const setupShipsPayload = ships.map((ship) => ({
-        name: ship.type,
-        size: SHIP_SIZES[ship.type],
-        startX: ship.startCol,
-        startY: ship.startRow,
-        orientation: ship.orientation,
+      const payload: SetupShipPayload[] = placedShips.map((ship) => ({
+        name: ship.type,          // ShipType enum value — matches backend string
+        size: ship.size,
+        startX: ship.x,
+        startY: ship.y,
+        orientation: ship.orientation, // ShipOrientation enum — "Horizontal" | "Vertical"
       }));
-      // 2. Primeiro envia as posições
-      console.log(
-        "Payload a ser enviado:",
-        JSON.stringify(setupShipsPayload, null, 2),
-      );
 
-      // Envia as posições
-      await setupMatch.mutateAsync(setupShipsPayload);
-
-      console.log("Frota confirmada e pronta para o combate!");
-    } catch (error) {
-      console.error("Erro na sequência de confirmação:", error);
+      await setupMatch.mutateAsync(payload);
+    } catch (error: unknown) {
+      const msg =
+        error instanceof Error
+          ? error.message
+          : 'Erro desconhecido ao enviar frota.';
+      setErrorMsg(msg);
+      console.error('Erro na sequência de confirmação:', error);
     }
   };
 
-  // Verifica se qualquer um dos jogadores já confirmou
+  // ── Derived ──────────────────────────────────────────────────────────────
   const isPlayerReady = match.player1.isReady || match.player2?.isReady;
+  const isDeploying   = setupMatch.isPending;
+  const canConfirm    = allShipsPlaced() && !isPlayerReady && !isDeploying;
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            Posicione Sua Frota
-          </h1>
-          <p className="text-gray-300">
-            Arraste os navios ou clique no tabuleiro para definir a estratégia
-          </p>
-          {match.player2 && (
-            <div className="mt-4 p-2 bg-black/30 inline-block rounded-lg border border-white/10">
-              <span className="text-yellow-400 font-mono">ADVERSÁRIO:</span>
-              <span className="text-white ml-2">{match.player2.username}</span>
-              {match.player2.isReady && (
-                <span className="text-green-400 ml-2">✓ PRONTO</span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Menu Lateral de Navios */}
-          <div className="lg:col-span-1">
-            <div className="bg-white/95 backdrop-blur shadow-2xl rounded-xl p-6 border-b-8 border-naval-action">
-              <h2 className="text-xl font-black text-gray-800 mb-6 uppercase tracking-widest">
-                Porto de Guerra
-              </h2>
-
-              <div className="space-y-4">
-                {FLEET_COMPOSITION.map((shipType) => (
-                  <DraggableShip
-                    key={shipType}
-                    type={shipType}
-                    orientation={
-                      ships.find((s) => s.type === shipType)?.orientation ||
-                      ShipOrientation.HORIZONTAL
-                    }
-                    isPlaced={isShipPlaced(shipType)}
-                    onSelect={() => selectShip(shipType)}
-                  />
-                ))}
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-8">
+        <div className="max-w-7xl mx-auto">
+          {/* ── Header ───────────────────────────────────────────────── */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Posicione Sua Frota
+            </h1>
+            <p className="text-gray-300">
+              Arraste os navios para o tabuleiro ou clique para posicionar.
+              Pressione <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-xs font-mono">R</kbd> para girar.
+            </p>
+            {match.player2 && (
+              <div className="mt-4 p-2 bg-black/30 inline-block rounded-lg border border-white/10">
+                <span className="text-yellow-400 font-mono">ADVERSÁRIO:</span>
+                <span className="text-white ml-2">{match.player2.username}</span>
+                {match.player2.isReady && (
+                  <span className="text-green-400 ml-2">✓ PRONTO</span>
+                )}
               </div>
+            )}
+          </div>
 
-              <div className="mt-8 pt-6 border-t border-gray-100">
-                <GameControls
-                  onRotate={handleRotate}
-                  onConfirm={handleConfirm}
-                  canRotate={!!selectedShip}
-                  canConfirm={allShipsPlaced() && !isPlayerReady}
-                  confirmLabel="Zarpar Frota"
-                />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* ── Dock (left sidebar) ───────────────────────────────── */}
+            <div className="lg:col-span-1">
+              <div className="rounded-xl border border-naval-border bg-naval-surface/80 p-6">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-naval-text-secondary mb-4">
+                  Porto de Guerra
+                </h2>
 
-                <Button
-                  onClick={clearBoard}
-                  variant="outline"
-                  className="w-full mt-4 text-red-500 hover:bg-red-50"
-                  disabled={isPlayerReady}
-                >
-                  Reiniciar Tabuleiro
-                </Button>
-              </div>
-
-              {isPlayerReady && (
-                <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-700 text-center font-bold animate-pulse">
-                    ⚓ AGUARDANDO COMANDANTE ADVERSÁRIO...
+                {availableShips.length === 0 && (
+                  <p className="text-xs text-naval-text-muted italic mb-4">
+                    Todos os navios foram posicionados.
                   </p>
+                )}
+
+                <div className="flex flex-col gap-4 mb-6">
+                  {availableShips.map((ship) => {
+                    const config = FLEET_CONFIG[ship.type];
+                    const isSelected = ship.id === selectedId;
+
+                    return (
+                      <div
+                        key={ship.id}
+                        onClick={() =>
+                          setSelectedId((prev) =>
+                            prev === ship.id ? null : ship.id,
+                          )
+                        }
+                        className={
+                          'flex flex-col items-start gap-1 rounded-lg p-3 transition-colors cursor-pointer ' +
+                          (isSelected
+                            ? 'ring-2 ring-naval-action bg-naval-action/10'
+                            : 'bg-naval-bg/40 hover:bg-naval-action/10')
+                        }
+                      >
+                        <span className="text-xs font-semibold text-naval-text-primary">
+                          {config.label}
+                          <span className="ml-1.5 text-naval-text-muted font-normal">
+                            ({config.size} casas)
+                          </span>
+                        </span>
+
+                        <DraggableShip
+                          shipId={ship.id}
+                          type={ship.type}
+                          size={ship.size}
+                          orientation={ship.orientation}
+                          disabled={!!isPlayerReady || isDeploying || setupMatch.isSuccess}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+
+                {/* ── Controls ───────────────────────────────────────── */}
+                <div className="pt-4 border-t border-naval-border space-y-3">
+                  {/* Rotate */}
+                  <Button
+                    onClick={() => { if (selectedId) rotateShip(selectedId); }}
+                    variant="outline"
+                    className="w-full"
+                    disabled={!selectedId || isDeploying}
+                  >
+                    🔄 Girar Navio
+                  </Button>
+
+                  {/* Confirm / Deploy */}
+                  <Button
+                    onClick={handleConfirm}
+                    variant="default"
+                    className="w-full"
+                    disabled={!canConfirm}
+                    isLoading={isDeploying}
+                  >
+                    {isDeploying ? 'Enviando Frota...' : '✓ Zarpar Frota'}
+                  </Button>
+
+                  {/* Reset */}
+                  <Button
+                    onClick={resetFleet}
+                    variant="outline"
+                    className="w-full text-red-500 hover:bg-red-50/10"
+                    disabled={!!isPlayerReady || isDeploying}
+                  >
+                    Reiniciar Tabuleiro
+                  </Button>
+                </div>
+
+                {/* Error toast */}
+                {errorMsg && (
+                  <div className="mt-4 p-3 bg-red-900/40 border border-red-500/50 rounded-lg animate-in fade-in">
+                    <p className="text-red-300 text-sm text-center">
+                      ⚠ {errorMsg}
+                    </p>
+                  </div>
+                )}
+
+                {/* Success / waiting state */}
+                {(isPlayerReady || setupMatch.isSuccess) && (
+                  <div className="mt-6 p-4 bg-green-900/30 border border-green-600/40 rounded-lg">
+                    <p className="text-green-400 text-center font-bold animate-pulse">
+                      ⚓ AGUARDANDO COMANDANTE ADVERSÁRIO...
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Board ──────────────────────────────────────────────── */}
+            <div className="lg:col-span-2 flex items-center justify-center bg-blue-950/40 rounded-3xl p-6 border border-white/5 shadow-inner">
+              <SetupGrid onCellClick={handleCellClick}>
+                {/* Droppable layer — invisible but receives drops */}
+                {Array.from({ length: GRID_SIZE }, (_, y) =>
+                  Array.from({ length: GRID_SIZE }, (_, x) => (
+                    <div
+                      key={`drop-${x}-${y}`}
+                      className="absolute"
+                      style={{
+                        left: x * CELL_SIZE,
+                        top:  y * CELL_SIZE,
+                        width:  CELL_SIZE,
+                        height: CELL_SIZE,
+                      }}
+                    >
+                      <DroppableCell x={x} y={y} onClick={handleCellClick} />
+                    </div>
+                  )),
+                )}
+
+                {/* Placed ships — draggable on the board */}
+                {placedShips.map((ship) => (
+                  <div
+                    key={ship.id}
+                    className="absolute z-10 pointer-events-auto"
+                    style={{
+                      left: ship.x * CELL_SIZE,
+                      top:  ship.y * CELL_SIZE,
+                    }}
+                  >
+                    <DraggableShip
+                      shipId={ship.id}
+                      type={ship.type}
+                      size={ship.size}
+                      orientation={ship.orientation}
+                      disabled={!!isPlayerReady || isDeploying || setupMatch.isSuccess}
+                    />
+                  </div>
+                ))}
+              </SetupGrid>
             </div>
           </div>
 
-          {/* Área do Tabuleiro */}
-          <div className="lg:col-span-2 flex items-center justify-center bg-blue-950/40 rounded-3xl p-6 border border-white/5 shadow-inner">
-            <Grid
-              grid={renderGrid()}
-              onCellClick={handleCellClick}
-              readOnly={isPlayerReady} // Bloqueia o grid após confirmar
-              showShips={true}
-            />
+          {/* ── Back to lobby ─────────────────────────────────────────── */}
+          <div className="mt-12 text-center">
+            <Button
+              onClick={() => router.push('/lobby')}
+              variant="ghost"
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              ← Retornar ao Menu Principal
+            </Button>
           </div>
-        </div>
-
-        <div className="mt-12 text-center">
-          <Button
-            onClick={() => router.push("/lobby")}
-            variant="ghost"
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            ← Retornar ao Menu Principal
-          </Button>
         </div>
       </div>
-    </div>
+
+      {/* ── Drag Overlay (cursor-attached ghost) ──────────────────────── */}
+      <DragOverlay dropAnimation={null}>
+        {activeShip ? (
+          <ShipUnit
+            type={activeShip.type}
+            size={activeShip.size}
+            orientation={activeShip.orientation}
+            ghost
+          />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

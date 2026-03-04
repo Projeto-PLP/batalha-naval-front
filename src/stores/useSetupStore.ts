@@ -1,338 +1,327 @@
 /**
- * Setup Store - Ship Placement State Management
+ * Setup Store — Ship Placement State Management
  *
- * Zustand store for managing the ship placement phase.
- * Handles ship positioning, rotation, validation, and board state.
+ * Zustand store for the positioning (setup) phase.
+ *
+ * Architecture:
+ *  • Pure validation helpers are exported so they can be tested independently.
+ *  • The store holds two lists: `availableShips` (dock) and `placedShips` (board).
+ *  • Every ship is identified by a unique `id` string.
+ *  • No UI / drag-and-drop logic lives here — only data + rules.
  */
-import { create } from "zustand";
-import { ShipType, ShipOrientation } from "@/types/game-enums";
-import { GRID_SIZE, SHIP_SIZES, FLEET_COMPOSITION } from "@/lib/constants";
 
-/**
- * Ship position on the grid
- */
-export interface ShipPosition {
+import { create } from 'zustand';
+import { ShipType, ShipOrientation } from '@/types/game-enums';
+import { FLEET_CONFIG, GRID_SIZE } from '@/lib/game-rules';
+
+// ─── Exported Types ──────────────────────────────────────────────────────────
+
+/** Ship that lives in the dock (not yet placed on the board). */
+export interface DockShip {
+  id: string;
   type: ShipType;
   size: number;
   orientation: ShipOrientation;
-  startRow: number;
-  startCol: number;
 }
 
-/**
- * Initial fleet positions (off-board for manual placement)
- */
-const INITIAL_SHIPS: ShipPosition[] = FLEET_COMPOSITION.map((type, index) => ({
-  type,
-  size: SHIP_SIZES[type],
-  orientation: ShipOrientation.HORIZONTAL,
-  startRow: -1, // Off-board initially
-  startCol: -1,
-}));
-
-/**
- * Setup Store State and Actions
- */
-interface SetupStore {
-  // State
-  ships: ShipPosition[];
-  selectedShip: ShipType | null;
-  isDragging: boolean;
-
-  // Actions
-  placeShip: (type: ShipType, row: number, col: number) => boolean;
-  addShip: (ship: ShipPosition) => boolean;
-  removeShip: (type: ShipType) => void;
-  updateShip: (type: ShipType, updates: Partial<ShipPosition>) => void;
-  selectShip: (type: ShipType | null) => void;
-  setDragging: (isDragging: boolean) => void;
-  rotateShip: (type: ShipType) => boolean;
-  resetBoard: () => void;
-  clearBoard: () => void;
-  randomizeBoard: () => void;
-
-  // Queries
-  isShipPlaced: (type: ShipType) => boolean;
-  isPositionValid: (ship: ShipPosition) => boolean;
-  allShipsPlaced: () => boolean;
-  getShip: (type: ShipType) => ShipPosition | undefined;
+/** Ship placed on the board with absolute coordinates. */
+export interface PlacedShip {
+  id: string;
+  type: ShipType;
+  size: number;
+  /** Column — 0-based, left → right. */
+  x: number;
+  /** Row — 0-based, top → bottom. */
+  y: number;
+  orientation: ShipOrientation;
 }
 
-/**
- * Helper: Get occupied cells by a ship
- */
-const getShipCells = (ship: ShipPosition): Set<string> => {
-  const cells = new Set<string>();
-  const size = SHIP_SIZES[ship.type];
+// ─── Pure Validation Logic (no store dependency) ─────────────────────────────
 
+/**
+ * Returns the list of cells `{ x, y }` a ship would occupy.
+ *
+ * Horizontal → extends along the x-axis (columns).
+ * Vertical   → extends along the y-axis (rows).
+ */
+export function getShipCells(
+  x: number,
+  y: number,
+  size: number,
+  orientation: ShipOrientation,
+): { x: number; y: number }[] {
+  const cells: { x: number; y: number }[] = [];
   for (let i = 0; i < size; i++) {
-    const row =
-      ship.orientation === ShipOrientation.HORIZONTAL
-        ? ship.startRow
-        : ship.startRow + i;
-    const col =
-      ship.orientation === ShipOrientation.HORIZONTAL
-        ? ship.startCol + i
-        : ship.startCol;
-    cells.add(`${row},${col}`);
+    cells.push({
+      x: orientation === ShipOrientation.HORIZONTAL ? x + i : x,
+      y: orientation === ShipOrientation.VERTICAL ? y + i : y,
+    });
   }
-
   return cells;
-};
+}
 
 /**
- * Helper: Check if position is within grid bounds
+ * Checks whether a ship (given start + size + orientation) fits inside the grid.
  */
-const isWithinBounds = (ship: ShipPosition): boolean => {
-  const size = SHIP_SIZES[ship.type];
+export function isWithinBounds(
+  x: number,
+  y: number,
+  size: number,
+  orientation: ShipOrientation,
+  gridSize: number = GRID_SIZE,
+): boolean {
+  if (x < 0 || y < 0) return false;
 
-  if (ship.startRow < 0 || ship.startCol < 0) return false;
-
-  if (ship.orientation === ShipOrientation.HORIZONTAL) {
-    return ship.startCol + size <= GRID_SIZE && ship.startRow < GRID_SIZE;
-  } else {
-    return ship.startRow + size <= GRID_SIZE && ship.startCol < GRID_SIZE;
+  if (orientation === ShipOrientation.HORIZONTAL) {
+    return x + size <= gridSize && y < gridSize;
   }
-};
+  return y + size <= gridSize && x < gridSize;
+}
 
 /**
- * Helper: Check if ships overlap
+ * Checks whether any of the `candidateCells` overlaps with already-placed ships.
+ *
+ * @param excludeShipId  Ship id to skip (useful when repositioning a ship).
  */
-const hasOverlap = (
-  ship: ShipPosition,
-  otherShips: ShipPosition[],
-): boolean => {
-  const shipCells = getShipCells(ship);
+export function hasCollision(
+  candidateCells: { x: number; y: number }[],
+  existingShips: PlacedShip[],
+  excludeShipId?: string,
+): boolean {
+  const occupied = new Set<string>();
 
-  for (const other of otherShips) {
-    if (other.type === ship.type) continue;
-    if (other.startRow < 0 || other.startCol < 0) continue; // Skip unplaced ships
-
-    const otherCells = getShipCells(other);
-
-    // Check intersection
-    for (const cell of shipCells) {
-      if (otherCells.has(cell)) {
-        return true;
-      }
+  for (const ship of existingShips) {
+    if (ship.id === excludeShipId) continue;
+    for (const cell of getShipCells(ship.x, ship.y, ship.size, ship.orientation)) {
+      occupied.add(`${cell.x},${cell.y}`);
     }
   }
 
-  return false;
-};
+  return candidateCells.some((c) => occupied.has(`${c.x},${c.y}`));
+}
 
 /**
- * Helper: Generate random ship placement
+ * Master validation — **pure function**, testable without a store.
+ *
+ * @param ship            Object with at least `{ size }`.
+ * @param x               Target column.
+ * @param y               Target row.
+ * @param orientation     Target orientation.
+ * @param currentShips    All ships currently on the board.
+ * @param excludeShipId   Optional ship id to ignore (for repositioning).
+ * @returns `true` when the placement is legal.
  */
-const getRandomPlacement = (
-  type: ShipType,
-  existingShips: ShipPosition[],
-  maxAttempts: number = 100,
-): ShipPosition | null => {
-  const size = SHIP_SIZES[type];
+export function isValidPlacement(
+  ship: { size: number },
+  x: number,
+  y: number,
+  orientation: ShipOrientation,
+  currentShips: PlacedShip[],
+  excludeShipId?: string,
+): boolean {
+  if (!isWithinBounds(x, y, ship.size, orientation)) return false;
+  const cells = getShipCells(x, y, ship.size, orientation);
+  return !hasCollision(cells, currentShips, excludeShipId);
+}
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const orientation =
-      Math.random() < 0.5
-        ? ShipOrientation.HORIZONTAL
-        : ShipOrientation.VERTICAL;
+// ─── Fleet Factory ───────────────────────────────────────────────────────────
 
-    const maxRow =
-      orientation === ShipOrientation.HORIZONTAL
-        ? GRID_SIZE
-        : GRID_SIZE - size + 1;
-    const maxCol =
-      orientation === ShipOrientation.HORIZONTAL
-        ? GRID_SIZE - size + 1
-        : GRID_SIZE;
+/**
+ * Creates the initial dock fleet from `FLEET_CONFIG`.
+ * Each ship receives a deterministic `id` derived from its type (and index when
+ * `count > 1`).
+ */
+function createInitialFleet(): DockShip[] {
+  const fleet: DockShip[] = [];
 
-    const startRow = Math.floor(Math.random() * maxRow);
-    const startCol = Math.floor(Math.random() * maxCol);
+  for (const shipType of Object.values(ShipType)) {
+    const config = FLEET_CONFIG[shipType];
 
-    const ship: ShipPosition = { type, size, orientation, startRow, startCol };
-
-    if (isWithinBounds(ship) && !hasOverlap(ship, existingShips)) {
-      return ship;
+    for (let i = 0; i < config.count; i++) {
+      fleet.push({
+        id: config.count === 1 ? shipType : `${shipType}-${i}`,
+        type: shipType,
+        size: config.size,
+        orientation: ShipOrientation.HORIZONTAL,
+      });
     }
   }
 
-  return null;
-};
+  return fleet;
+}
 
-/**
- * Zustand Store Implementation
- */
+// ─── Store Interface ─────────────────────────────────────────────────────────
+
+interface SetupState {
+  /** Ships remaining in the dock, not yet placed. */
+  availableShips: DockShip[];
+  /** Ships currently on the board. */
+  placedShips: PlacedShip[];
+}
+
+interface SetupActions {
+  /**
+   * Move a ship from the dock to the board or reposition an already-placed ship.
+   * @returns `true` when the placement succeeds.
+   */
+  placeShip: (shipId: string, x: number, y: number) => boolean;
+
+  /**
+   * Toggle orientation (H ↔ V).
+   * If the ship is on the board, the rotation is only applied when the new
+   * orientation still results in a valid position.
+   * @returns `true` when the rotation succeeds.
+   */
+  rotateShip: (shipId: string) => boolean;
+
+  /** Return a placed ship to the dock. */
+  removeShip: (shipId: string) => void;
+
+  /** Reset the entire fleet back to the initial dock state. */
+  resetFleet: () => void;
+
+  /** `true` when every ship in the fleet has been placed on the board. */
+  allShipsPlaced: () => boolean;
+}
+
+export type SetupStore = SetupState & SetupActions;
+
+// ─── Zustand Store ───────────────────────────────────────────────────────────
+
 export const useSetupStore = create<SetupStore>((set, get) => ({
-  // Initial State
-  ships: [...INITIAL_SHIPS],
-  selectedShip: null,
-  isDragging: false,
+  // ── State ──────────────────────────────────────────────────────────────────
+  availableShips: createInitialFleet(),
+  placedShips: [],
 
-  // Place ship at specific coordinates
-  placeShip: (type, row, col) => {
-    const state = get();
-    const ship = state.ships.find((s) => s.type === type);
+  // ── Actions ────────────────────────────────────────────────────────────────
 
-    if (!ship) return false;
+  placeShip: (shipId, x, y) => {
+    const { availableShips, placedShips } = get();
 
-    const updatedShip: ShipPosition = {
-      ...ship,
-      startRow: row,
-      startCol: col,
+    // 1. Locate the ship — it can be in either list.
+    const dockIndex = availableShips.findIndex((s) => s.id === shipId);
+    const boardIndex = placedShips.findIndex((s) => s.id === shipId);
+
+    if (dockIndex === -1 && boardIndex === -1) return false;
+
+    const source: DockShip | PlacedShip =
+      dockIndex !== -1 ? availableShips[dockIndex] : placedShips[boardIndex];
+
+    // 2. Validate the target position.
+    if (
+      !isValidPlacement(
+        { size: source.size },
+        x,
+        y,
+        source.orientation,
+        placedShips,
+        boardIndex !== -1 ? shipId : undefined,
+      )
+    ) {
+      return false;
+    }
+
+    // 3. Build the placed representation.
+    const placed: PlacedShip = {
+      id: source.id,
+      type: source.type,
+      size: source.size,
+      x,
+      y,
+      orientation: source.orientation,
     };
 
-    if (state.isPositionValid(updatedShip)) {
-      set((state) => ({
-        ships: state.ships.map((s) => (s.type === type ? updatedShip : s)),
-      }));
-      return true;
+    if (dockIndex !== -1) {
+      // Dock → Board
+      set({
+        availableShips: availableShips.filter((_, i) => i !== dockIndex),
+        placedShips: [...placedShips, placed],
+      });
+    } else {
+      // Reposition on board
+      set({
+        placedShips: placedShips.map((s) => (s.id === shipId ? placed : s)),
+      });
     }
 
-    return false;
+    return true;
   },
 
-  // Add or update ship
-  addShip: (ship) => {
-    const state = get();
-    if (state.isPositionValid(ship)) {
-      set((state) => ({
-        ships: state.ships.map((s) => (s.type === ship.type ? ship : s)),
-      }));
-      return true;
-    }
-    return false;
-  },
+  rotateShip: (shipId) => {
+    const { availableShips, placedShips } = get();
 
-  // Remove ship from board (return to initial position)
-  removeShip: (type) =>
-    set((state) => ({
-      ships: state.ships.map((s) =>
-        s.type === type ? { ...s, startRow: -1, startCol: -1 } : s,
-      ),
-    })),
-
-  // Update ship properties
-  updateShip: (type, updates) => {
-    const state = get();
-    const ship = state.ships.find((s) => s.type === type);
-
-    if (!ship) return;
-
-    const updatedShip = { ...ship, ...updates };
-
-    // Validate if position or orientation changed
-    if (
-      updates.startRow !== undefined ||
-      updates.startCol !== undefined ||
-      updates.orientation !== undefined
-    ) {
-      if (!state.isPositionValid(updatedShip)) {
-        return;
-      }
-    }
-
-    set((state) => ({
-      ships: state.ships.map((s) => (s.type === type ? updatedShip : s)),
-    }));
-  },
-
-  // Select ship for interaction
-  selectShip: (type) => set({ selectedShip: type }),
-
-  // Set dragging state
-  setDragging: (isDragging) => set({ isDragging }),
-
-  // Rotate ship 90 degrees
-  rotateShip: (type) => {
-    const state = get();
-    const ship = state.ships.find((s) => s.type === type);
-
-    if (!ship) return false;
-
-    const newOrientation =
-      ship.orientation === ShipOrientation.HORIZONTAL
+    const flipOrientation = (o: ShipOrientation) =>
+      o === ShipOrientation.HORIZONTAL
         ? ShipOrientation.VERTICAL
         : ShipOrientation.HORIZONTAL;
 
-    const updatedShip = { ...ship, orientation: newOrientation };
-
-    // Only validate if ship is already placed on board
-    if (ship.startRow >= 0 && ship.startCol >= 0) {
-      if (!state.isPositionValid(updatedShip)) {
-        return false;
-      }
+    // Check dock first — rotation in dock always succeeds (no bounds to check).
+    const dockIndex = availableShips.findIndex((s) => s.id === shipId);
+    if (dockIndex !== -1) {
+      set({
+        availableShips: availableShips.map((s, i) =>
+          i === dockIndex
+            ? { ...s, orientation: flipOrientation(s.orientation) }
+            : s,
+        ),
+      });
+      return true;
     }
 
-    state.updateShip(type, { orientation: newOrientation });
+    // Check board — rotation must keep the ship in a valid position.
+    const boardIndex = placedShips.findIndex((s) => s.id === shipId);
+    if (boardIndex === -1) return false;
+
+    const ship = placedShips[boardIndex];
+    const newOrientation = flipOrientation(ship.orientation);
+
+    if (
+      !isValidPlacement(
+        { size: ship.size },
+        ship.x,
+        ship.y,
+        newOrientation,
+        placedShips,
+        shipId,
+      )
+    ) {
+      return false;
+    }
+
+    set({
+      placedShips: placedShips.map((s) =>
+        s.id === shipId ? { ...s, orientation: newOrientation } : s,
+      ),
+    });
     return true;
   },
 
-  // Reset to initial state (ships off-board)
-  resetBoard: () =>
+  removeShip: (shipId) => {
+    const { placedShips } = get();
+    const ship = placedShips.find((s) => s.id === shipId);
+    if (!ship) return;
+
+    const dockShip: DockShip = {
+      id: ship.id,
+      type: ship.type,
+      size: ship.size,
+      orientation: ship.orientation,
+    };
+
+    set((state) => ({
+      placedShips: state.placedShips.filter((s) => s.id !== shipId),
+      availableShips: [...state.availableShips, dockShip],
+    }));
+  },
+
+  resetFleet: () => {
     set({
-      ships: [...INITIAL_SHIPS],
-      selectedShip: null,
-      isDragging: false,
-    }),
-
-  // Clear all ships
-  clearBoard: () =>
-    set({
-      ships: INITIAL_SHIPS.map((s) => ({ ...s, startRow: -1, startCol: -1 })),
-      selectedShip: null,
-      isDragging: false,
-    }),
-
-  // Randomize all ship placements
-  randomizeBoard: () => {
-    const placedShips: ShipPosition[] = [];
-
-    for (const type of FLEET_COMPOSITION) {
-      const placement = getRandomPlacement(type, placedShips);
-
-      if (placement) {
-        placedShips.push(placement);
-      } else {
-        // Fallback: if random placement fails, reset
-        console.warn(`Failed to place ${type} randomly`);
-        set({ ships: [...INITIAL_SHIPS] });
-        return;
-      }
-    }
-
-    set({ ships: placedShips, selectedShip: null });
+      availableShips: createInitialFleet(),
+      placedShips: [],
+    });
   },
 
-  // Check if specific ship is placed on board
-  isShipPlaced: (type) => {
-    const ship = get().ships.find((s) => s.type === type);
-    return ship ? ship.startRow >= 0 && ship.startCol >= 0 : false;
-  },
-
-  // Validate ship position
-  isPositionValid: (ship) => {
-    const { ships } = get();
-
-    // Off-board positions are valid (for unplaced ships)
-    if (ship.startRow < 0 || ship.startCol < 0) return true;
-
-    // Check bounds
-    if (!isWithinBounds(ship)) return false;
-
-    // Check overlap with other ships
-    if (hasOverlap(ship, ships)) return false;
-
-    return true;
-  },
-
-  // Check if all ships are placed
   allShipsPlaced: () => {
-    const { ships } = get();
-    return ships.every((ship) => ship.startRow >= 0 && ship.startCol >= 0);
-  },
-
-  // Get specific ship
-  getShip: (type) => {
-    return get().ships.find((s) => s.type === type);
+    return get().availableShips.length === 0;
   },
 }));

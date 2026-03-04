@@ -1,10 +1,8 @@
 // React Query hooks para mutations de match
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { matchService } from "@/services/matchService";
-import { SetupShipPayload, ShootPayload, Match } from "@/types/api-responses";
-import { CreateMatch, SetupMatchRequest } from "@/types/api-requests";
-import { authService } from "@/services/authService";
-import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { matchService } from '@/services/matchService';
+import { SetupShipPayload, ShootPayload, Match } from '@/types/api-responses';
+import { CreateMatch } from '@/types/api-requests';
 
 export const useCreateMatchMutation = () => {
   const queryClient = useQueryClient();
@@ -20,34 +18,30 @@ export const useCreateMatchMutation = () => {
   });
 };
 
+/**
+ * Hook for submitting the fleet layout during the Setup phase.
+ *
+ * Accepts `SetupShipPayload[]` (already mapped to backend DTOs).
+ * On success it invalidates the match query so polling picks up the
+ * new state (Setup → Battle transition).
+ */
 export const useSetupMatchMutation = () => {
   const queryClient = useQueryClient();
-  const router = useRouter();
+
   return useMutation({
     mutationFn: (ships: SetupShipPayload[]) => {
-      const storedId = localStorage.getItem("matchId");
+      const storedId = localStorage.getItem('matchId');
       if (!storedId) {
-        throw new Error("Match ID NOT FOUND");
+        throw new Error('Match ID NOT FOUND in localStorage');
       }
 
-      const requestPayload: SetupMatchRequest = {
-        matchId: storedId,
-        ships: ships,
-      };
-
-      return matchService.placeShip(requestPayload);
+      return matchService.setupFleet(storedId, ships);
     },
-    onSuccess: (data) => {
-      const matchId = localStorage.getItem("matchId");
-      //invalida a query "match". Isso fará o page.tsx buscar os dados novos,
-      //receber status "InProgress" e trocar o componente visual.
-      if (matchId) {
-        queryClient.invalidateQueries({ queryKey: ["match", matchId] });
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['match'] });
     },
-    onError: (error) => {
-      console.error("Erro tático ao posicionar frota:", error);
-    },
+    // Error handling is delegated to the caller so SetupPhase can
+    // display contextual feedback (toast / inline message).
   });
 };
 

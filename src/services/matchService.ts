@@ -19,11 +19,30 @@ export const matchService = {
     return data;
   },
 
-  // Posicionar navio durante o setup
+  // Posicionar navio durante o setup (legacy — kept for compatibility)
   async placeShip(setup: SetupMatchRequest): Promise<SetupMatchRequest> {
     const { data } = await api.post<SetupMatchRequest>(`/match/setup`, setup);
     return data;
   },
+
+  /**
+   * Submit the full fleet placement and mark the player as ready.
+   *
+   * Sends `POST /match/setup` with `{ matchId, ships }` where each ship
+   * follows the `SetupShipPayload` DTO expected by the backend.
+   *
+   * @returns The raw response data from the API.
+   */
+  async setupFleet(
+    matchId: string,
+    ships: SetupShipPayload[],
+  ): Promise<SetupMatchRequest> {
+    const payload: SetupMatchRequest = { matchId, ships };
+    const { data } = await api.post<SetupMatchRequest>('/match/setup', payload);
+    return data;
+  },
+
+
 
   // Listar partidas disponíveis
   async listMatches(): Promise<MatchListItem[]> {
