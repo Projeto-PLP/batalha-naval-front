@@ -31,6 +31,7 @@ import { MatchStatus } from "@/types/game-enums";
 import {
   AlertCircle,
   ArrowRight,
+  Anchor,
   Badge,
   Bot,
   Brain,
