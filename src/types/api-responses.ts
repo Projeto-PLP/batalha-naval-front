@@ -5,6 +5,7 @@ export interface UserProfile {
   rankPoints: number;
   wins: number;
   losses: number;
+  earnedMedalCodes: string[];
 }
 export interface AuthResponse {
   accessToken: string;
