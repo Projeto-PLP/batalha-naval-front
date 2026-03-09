@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/Input";
 import {
   useCreateMatchMutation,
   useJoinMatchMutation,
+  useCancelMatchMutation,
 } from "@/hooks/queries/useMatchMutations";
 import {
   useMatchListQuery,
@@ -113,6 +114,7 @@ export const GameModeSelector: React.FC = () => {
   const createMatch = useCreateMatchMutation();
   const cancelCampaign = useCancelCampaignMutation();
   const joinMatch = useJoinMatchMutation();
+  const cancelMatch = useCancelMatchMutation();
   const { data: matches, isLoading: isLoadingMatches } = useMatchListQuery();
   const { data: invites } = useInvitesQuery();
 
@@ -598,7 +600,7 @@ export const GameModeSelector: React.FC = () => {
             </div>
             <div className="relative flex justify-center">
               <span className="bg-slate-900 px-3 text-xs text-slate-500 uppercase tracking-wider">
-                Ou foi convidado?
+                Convites
               </span>
             </div>
           </div>
@@ -661,6 +663,21 @@ export const GameModeSelector: React.FC = () => {
                       <Gamepad2 className="w-4 h-4 mr-1" />
                       Aceitar
                     </Button>
+                    <Button
+                      size="sm"
+                      isLoading={cancelMatch.isPending} //
+                      className="ml-3 bg-red-500 hover:bg-red-700 text-white font-bold"
+                      onClick={async () => {
+                        try {
+                          await cancelMatch.mutateAsync(invite.matchId);
+                        } catch (error) {
+                          console.error("Falha ao recusar o convite", error);
+                        }
+                      }}
+                    >
+                      <XCircle className="w-4 h-4 mr-1" />
+                      Cancelar
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -668,7 +685,7 @@ export const GameModeSelector: React.FC = () => {
           )}
 
           {/* Accept Invite — Match ID */}
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
               <Link2 className="w-3.5 h-3.5" />
               Aceitar Convite
@@ -700,7 +717,7 @@ export const GameModeSelector: React.FC = () => {
           >
             <Gamepad2 className="mr-2 h-5 w-5" />
             Entrar na Partida
-          </Button>
+          </Button> */}
         </CardContent>
       </Card>
       {/*<Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm min-h-[300px] flex flex-col">
