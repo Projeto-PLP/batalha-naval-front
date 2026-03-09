@@ -121,7 +121,8 @@ export const Grid: React.FC<GridProps> = ({
                 const startX = Math.min(...ship.coordinates.map((c) => c.x));
                 const startY = Math.min(...ship.coordinates.map((c) => c.y));
                 const isValidType = VALID_SHIP_TYPES.has(ship.name);
-                const isHorizontal = ship.orientation === ShipOrientation.HORIZONTAL;
+                const isHorizontal =
+                  ship.orientation === ShipOrientation.HORIZONTAL;
                 const w = isHorizontal ? ship.size * CELL_SIZE : CELL_SIZE;
                 const h = isHorizontal ? CELL_SIZE : ship.size * CELL_SIZE;
                 return (
@@ -145,9 +146,7 @@ export const Grid: React.FC<GridProps> = ({
                       />
                     ) : (
                       // Fallback: solid colour bar when ship name is unrecognized
-                      <div
-                        className="w-full h-full rounded bg-slate-500 border border-slate-300 opacity-70"
-                      />
+                      <div className="w-full h-full rounded bg-slate-500 border border-slate-300 opacity-70" />
                     )}
                     {/* Sunk tint */}
                     {ship.isSunk && (

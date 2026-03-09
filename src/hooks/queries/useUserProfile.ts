@@ -7,7 +7,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { authService } from "@/services/authService";
 import { LeaderBoardResponse, UserDetails } from "@/types/api-responses";
-import { getPlayerProfileById} from "@/services/api";
+import { getPlayerProfileById } from "@/services/api";
 
 /**
  * Query key for user profile
@@ -30,16 +30,15 @@ export const useUserProfile = () => {
     queryKey: userProfileKeys.profile(),
     queryFn: async () => {
       const apiData = await authService.getProfile();
-      const storedUsername =
-        typeof window !== "undefined" ? localStorage.getItem("username") : "";
+
+      //O apiData traz o id e o username diretamente da sua API!
       return {
         ...apiData,
         gamesPlayed: apiData.wins + apiData.losses,
-        username: storedUsername || "JOGADOR",
       };
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes - profile doesn't change often
-    gcTime: 10 * 60 * 1000, // 10 minutes cache
+    staleTime: 5 * 60 * 1000, // 5 minutos
+    gcTime: 10 * 60 * 1000, // 10 minutos
     retry: 1, // Only retry once for auth failures
   });
 };

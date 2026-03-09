@@ -40,7 +40,9 @@ export const Radar: React.FC<RadarProps> = ({
 
   return (
     <div className="flex flex-col items-center">
-      <h3 className="text-xl font-bold mb-4 text-cyan-400 uppercase tracking-widest">⚡ Radar do Oponente</h3>
+      <h3 className="text-xl font-bold mb-4 text-cyan-400 uppercase tracking-widest">
+        ⚡ Radar do Oponente
+      </h3>
       <div className={isLoading ? "opacity-70 pointer-events-none" : ""}>
         <Grid
           grid={opponentGrid}

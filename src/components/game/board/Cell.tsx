@@ -52,11 +52,15 @@ export const Cell: React.FC<CellProps> = ({
 
   const getCellContent = () => {
     if (state === CellState.HIT) {
-      return <Ship className="w-4 h-4 text-yellow-100 drop-shadow-[0_0_4px_rgba(250,204,21,0.8)]" />;
+      return (
+        <Ship className="w-4 h-4 text-yellow-100 drop-shadow-[0_0_4px_rgba(250,204,21,0.8)]" />
+      );
     }
 
     if (state === CellState.MISS) {
-      return <Waves className="w-4 h-4 text-cyan-100 drop-shadow-[0_0_4px_rgba(125,211,252,0.8)]" />;
+      return (
+        <Waves className="w-4 h-4 text-cyan-100 drop-shadow-[0_0_4px_rgba(125,211,252,0.8)]" />
+      );
     }
 
     if (state === CellState.SHIP && showShip) {

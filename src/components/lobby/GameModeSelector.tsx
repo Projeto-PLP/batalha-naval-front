@@ -21,7 +21,10 @@ import {
   useCreateMatchMutation,
   useJoinMatchMutation,
 } from "@/hooks/queries/useMatchMutations";
-import { useMatchListQuery, useInvitesQuery } from "@/hooks/queries/useMatchQuery";
+import {
+  useMatchListQuery,
+  useInvitesQuery,
+} from "@/hooks/queries/useMatchQuery";
 import {
   useCampaignProgressQuery,
   useCancelCampaignMutation,
@@ -490,7 +493,8 @@ export const GameModeSelector: React.FC = () => {
             size="lg"
           >
             <Swords className="mr-2 h-5 w-5" />
-            Iniciar Treinamento {pveMode === "Dynamic" ? "Dinâmico" : "Clássico"}
+            Iniciar Treinamento{" "}
+            {pveMode === "Dynamic" ? "Dinâmico" : "Clássico"}
           </Button>
         </CardContent>
       </Card>
@@ -634,7 +638,9 @@ export const GameModeSelector: React.FC = () => {
                               : "text-cyan-400",
                           )}
                         >
-                          {invite.mode === "Dynamic" ? "Din\u00e2mico" : "Cl\u00e1ssico"}
+                          {invite.mode === "Dynamic"
+                            ? "Din\u00e2mico"
+                            : "Cl\u00e1ssico"}
                         </span>
                       </p>
                     </div>

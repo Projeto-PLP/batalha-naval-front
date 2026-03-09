@@ -151,9 +151,11 @@ export const getMatchHistory = async (): Promise<MatchHistoryItem[]> => {
   return response.data;
 };
 
-export const getPlayerProfileById = async (userId: string): Promise<UserDetails> => {
-    const response = await api.get<UserDetails>(`/users/${userId}/profile`);
-    return response.data;
+export const getPlayerProfileById = async (
+  userId: string,
+): Promise<UserDetails> => {
+  const response = await api.get<UserDetails>(`/users/${userId}/profile`);
+  return response.data;
 };
 
 export default api;

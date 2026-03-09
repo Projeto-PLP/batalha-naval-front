@@ -376,7 +376,6 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
           playVictory();
           addToast("Você venceu a batalha!", "victory", 5000);
         }, 2500); // 2500 ms = 2.5 segundos
-
       } else if (resolvedIsWinner === false) {
         // Opcional: Colocar um pequeno atraso dramático na derrota também
         setTimeout(() => {
@@ -473,7 +472,9 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
 
           {/* Meu Tabuleiro + Painel de Movimento */}
           <div className="flex flex-col items-center">
-            <h3 className="text-xl font-bold mb-4 text-slate-300 uppercase tracking-widest">⚓ Seu Tabuleiro</h3>
+            <h3 className="text-xl font-bold mb-4 text-slate-300 uppercase tracking-widest">
+              ⚓ Seu Tabuleiro
+            </h3>
             <Grid
               grid={myGrid}
               readOnly={true}
@@ -487,7 +488,7 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
               <div className="mt-4 w-full max-w-sm bg-slate-800/70 border border-slate-700 rounded-xl p-4 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-bold text-purple-400">
-                     Modo Dinâmico
+                    Modo Dinâmico
                   </span>
                   {hasMovedThisTurn && (
                     <span className="text-xs bg-green-700/40 text-green-300 px-2 py-0.5 rounded-full">
@@ -639,7 +640,11 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
         {/* Status das Frotas */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 items-start">
           <FleetStatus ships={myShips} title="Sua Frota" />
-          <FleetStatus ships={opponentShips} title="Frota do Oponente" isOpponentFleet={true} />
+          <FleetStatus
+            ships={opponentShips}
+            title="Frota do Oponente"
+            isOpponentFleet={true}
+          />
         </div>
 
         {/* Controles */}
