@@ -84,3 +84,18 @@ export const usePlayerProfile = (userId: string | null) => {
     staleTime: 1000 * 60 * 5, // Mantém o dado em cache por 5 minutos para evitar spam na API
   });
 };
+
+/**
+ * Calculate the next rank goal based on current wins
+ *
+ * @param wins - Number of current wins
+ * @returns Object containing next goal and current level base
+ */
+export const getNextRankGoal = (wins: number): { nextGoal: number; currentBase: number } => {
+  if (wins >= 100) return { nextGoal: 100, currentBase: 100 }; // Max rank reached
+  if (wins >= 50) return { nextGoal: 100, currentBase: 50 };
+  if (wins >= 25) return { nextGoal: 50, currentBase: 25 };
+  if (wins >= 10) return { nextGoal: 25, currentBase: 10 };
+  if (wins >= 5) return { nextGoal: 10, currentBase: 5 };
+  return { nextGoal: 5, currentBase: 0 };
+};
