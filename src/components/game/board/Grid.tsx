@@ -12,6 +12,49 @@ import { CELL_SIZE, FLEET_CONFIG } from "@/lib/game-rules";
 /** Set of valid backend ship name strings for quick lookup. */
 const VALID_SHIP_TYPES = new Set<string>(Object.values(ShipType));
 
+/**
+ * Maps backend ship names to ShipType.
+ * The backend sends base names without Alpha/Bravo suffix.
+ * Ships with duplicates are resolved by occurrence order:
+ * first "Porta-Aviões" → Alpha, second → Bravo (same for "Navio de Guerra").
+ */
+const EXACT_SHIP_TYPES = new Set<string>(Object.values(ShipType));
+
+const DUPLICATE_VARIANTS: Record<string, [ShipType, ShipType]> = {
+  "Porta-Aviões": [ShipType.PORTA_AVIAO_A, ShipType.PORTA_AVIAO_B],
+  "Navio de Guerra": [ShipType.NAVIO_GUERRA_A, ShipType.NAVIO_GUERRA_B],
+};
+
+/**
+ * Resolves an array of ships so that duplicate base names get alternating
+ * Alpha/Bravo variants. Call once per render with the full ship list.
+ */
+function resolveShipTypes(ships: ShipDto[]): Map<string, ShipType> {
+  const result = new Map<string, ShipType>();
+  const counters: Record<string, number> = {};
+
+  for (const ship of ships) {
+    // Exact enum match (e.g. own board ships with Alpha/Bravo suffix)
+    if (EXACT_SHIP_TYPES.has(ship.name)) {
+      result.set(ship.id, ship.name as ShipType);
+      continue;
+    }
+    // Duplicate base name: alternate between A and B variants
+    const variants = DUPLICATE_VARIANTS[ship.name];
+    if (variants) {
+      const idx = counters[ship.name] ?? 0;
+      result.set(ship.id, variants[idx % variants.length]);
+      counters[ship.name] = idx + 1;
+      continue;
+    }
+    // Single base name (e.g. "Encouraçado", "Submarino")
+    const exact = Object.values(ShipType).find((v) => v.startsWith(ship.name));
+    if (exact) result.set(ship.id, exact);
+  }
+
+  return result;
+}
+
 interface GridProps {
   grid: CellState[][];
   onCellClick?: (row: number, col: number) => void;
@@ -53,6 +96,12 @@ export const Grid: React.FC<GridProps> = ({
     if (!ships) return [];
     return showSunkShipsOnly ? ships.filter((s) => s.isSunk) : ships;
   }, [ships, showSunkShipsOnly]);
+
+  // Resolve base names ("Porta-Aviões") → alternating Alpha/Bravo ShipType
+  const resolvedTypes = useMemo(
+    () => resolveShipTypes(visibleShips),
+    [visibleShips],
+  );
 
   return (
     <div className="relative p-4 md:p-8 bg-slate-900/50 rounded-xl border border-slate-800 shadow-2xl backdrop-blur-md select-none inline-block">
@@ -120,7 +169,7 @@ export const Grid: React.FC<GridProps> = ({
                 if (!ship.coordinates?.length) return null;
                 const startX = Math.min(...ship.coordinates.map((c) => c.x));
                 const startY = Math.min(...ship.coordinates.map((c) => c.y));
-                const isValidType = VALID_SHIP_TYPES.has(ship.name);
+                const shipType = resolvedTypes.get(ship.id) ?? null;
                 const isHorizontal =
                   ship.orientation === ShipOrientation.HORIZONTAL;
                 const w = isHorizontal ? ship.size * CELL_SIZE : CELL_SIZE;
@@ -138,9 +187,9 @@ export const Grid: React.FC<GridProps> = ({
                       zIndex: 5,
                     }}
                   >
-                    {isValidType ? (
+                    {shipType ? (
                       <ShipUnit
-                        type={ship.name as ShipType}
+                        type={shipType}
                         size={ship.size}
                         orientation={ship.orientation as ShipOrientation}
                       />

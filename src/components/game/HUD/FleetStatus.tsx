@@ -5,6 +5,7 @@ import React from "react";
 import { ShipDto } from "@/types/api-responses";
 import { SHIP_NAMES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { BombIcon, Heart } from "lucide-react";
 
 interface FleetStatusProps {
   ships: ShipDto[];
@@ -81,10 +82,22 @@ export const FleetStatus: React.FC<FleetStatusProps> = ({
               )}
             >
               <span>{displayName}</span>
-              <span className="text-xs">
-                {ship.isSunk
-                  ? "💥 Afundado"
-                  : `❤️ ${ship.size - hits}/${ship.size}`}
+              <span className="text-xs flex items-center gap-1.5 font-medium">
+                {ship.isSunk ? (
+                  <>
+                    <BombIcon className="w-3 h-3 text-red-500" />
+                    <span className="text-red-400 uppercase tracking-wider">
+                      Afundado
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Heart className="w-3 h-3 text-rose-500 fill-rose-500/20" />
+                    <span className="text-slate-300">
+                      {ship.size - hits}/{ship.size}
+                    </span>
+                  </>
+                )}
               </span>
             </div>
           );
