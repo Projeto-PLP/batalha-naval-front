@@ -91,7 +91,9 @@ export const usePlayerProfile = (userId: string | null) => {
  * @param wins - Number of current wins
  * @returns Object containing next goal and current level base
  */
-export const getNextRankGoal = (wins: number): { nextGoal: number; currentBase: number } => {
+export const getNextRankGoal = (
+  wins: number,
+): { nextGoal: number; currentBase: number } => {
   if (wins >= 100) return { nextGoal: 100, currentBase: 100 }; // Max rank reached
   if (wins >= 50) return { nextGoal: 100, currentBase: 50 };
   if (wins >= 25) return { nextGoal: 50, currentBase: 25 };
