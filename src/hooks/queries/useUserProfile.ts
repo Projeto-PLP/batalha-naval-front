@@ -7,7 +7,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { authService } from "@/services/authService";
 import { LeaderBoardResponse, UserDetails } from "@/types/api-responses";
-import { getPlayerProfileById} from "@/services/api";
+import { getPlayerProfileById } from "@/services/api";
 
 /**
  * Query key for user profile

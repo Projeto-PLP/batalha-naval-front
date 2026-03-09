@@ -56,21 +56,30 @@ export const ShipUnit: React.FC<ShipUnitProps> = ({
     width: isHorizontal ? imgW : imgH,
     height: isHorizontal ? imgH : imgW,
     position: "relative",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     overflow: "hidden",
   };
 
-  // For vertical: rotate 90 ° clockwise around the image's top-left corner,
-  // then shift right by imgH so the result lands inside the container.
-  // Math: after rotate(90deg) round (0,0) the image sits at x∈[-imgH,0], y∈[0,imgW].
-  //       translateX(+imgH) moves it to x∈[0,imgH], y∈[0,imgW] — fits exactly.
+  // Image keeps its natural aspect ratio (only width is constrained).
+  // For vertical: rotate 90° clockwise around center then the container
+  // clips any overflow.
   const imgStyle: React.CSSProperties = isHorizontal
-    ? { width: imgW, height: imgH, display: "block" }
+    ? {
+        width: imgW,
+        height: imgH,
+        display: "block",
+      }
     : {
         width: imgW,
         height: imgH,
         position: "absolute",
-        transformOrigin: "0 0",
-        transform: `translateX(${imgH}px) rotate(90deg)`,
+        objectFit: "fill",
+        overflow: "visible",
+        transformOrigin: "center center",
+        transform: "rotate(90deg)",
+        maxWidth: "none",
       };
 
   return (
@@ -83,7 +92,7 @@ export const ShipUnit: React.FC<ShipUnitProps> = ({
         src={SHIP_IMAGES[type]}
         alt={config.label}
         draggable={false}
-        style={{ ...imgStyle, mixBlendMode: "multiply" }}
+        style={{ ...imgStyle }}
       />
     </div>
   );

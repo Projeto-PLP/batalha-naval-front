@@ -3,6 +3,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import { Hourglass, Target } from "lucide-react";
 
 interface TurnIndicatorProps {
   isYourTurn: boolean;
@@ -46,7 +47,7 @@ export const TurnIndicator: React.FC<TurnIndicatorProps> = ({
         <div className="flex items-center justify-center gap-3">
           {isYourTurn ? (
             <>
-              🎯 Seu turno, {playerName}!
+              <Target /> Seu turno, {playerName}!
               {showTimer && (
                 <span
                   className={cn(
@@ -64,7 +65,7 @@ export const TurnIndicator: React.FC<TurnIndicatorProps> = ({
             </>
           ) : (
             <>
-              ⏳ Turno de {opponentName}
+              <Hourglass /> Turno de {opponentName}
               {showTimer && (
                 <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-full text-sm font-mono font-black bg-gray-500/30 text-gray-600">
                   {secondsLeft}s

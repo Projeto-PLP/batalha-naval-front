@@ -6,6 +6,7 @@ import { Grid } from "./Grid";
 import { CellState } from "@/types/game-enums";
 import { GRID_SIZE } from "@/lib/constants";
 import { ShipDto } from "@/types/api-responses";
+import { Zap } from "lucide-react";
 
 interface RadarProps {
   opponentGrid: CellState[][];
@@ -39,8 +40,11 @@ export const Radar: React.FC<RadarProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center">
-      <h3 className="text-xl font-bold mb-4 text-cyan-400 uppercase tracking-widest">⚡ Radar do Oponente</h3>
+    <div className=" flex-col items-center">
+      <h3 className="text-xl flex gap-2 items-center align-center justify-center font-bold mb-4 text-cyan-400 uppercase tracking-widest">
+        <Zap></Zap>
+        <span>Radar do Oponente</span>
+      </h3>
       <div className={isLoading ? "opacity-70 pointer-events-none" : ""}>
         <Grid
           grid={opponentGrid}

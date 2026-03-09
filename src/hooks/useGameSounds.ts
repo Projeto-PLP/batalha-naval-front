@@ -235,9 +235,18 @@ export function useGameSounds() {
 
   // Mapeando cada ação para o seu respectivo arquivo MP3
   const playHit = useCallback(() => playSound("/sounds/hit.wav"), [playSound]);
-  const playMiss = useCallback(() => playSound("/sounds/miss.wav"), [playSound]);
-  const playSunk = useCallback(() => playSound("/sounds/sunk.wav"), [playSound]);
-  const playVictory = useCallback(() => playSound("/sounds/victory.wav"), [playSound]);
+  const playMiss = useCallback(
+    () => playSound("/sounds/miss.wav"),
+    [playSound],
+  );
+  const playSunk = useCallback(
+    () => playSound("/sounds/sunk.wav"),
+    [playSound],
+  );
+  const playVictory = useCallback(
+    () => playSound("/sounds/victory.wav"),
+    [playSound],
+  );
 
   return { playHit, playMiss, playSunk, playVictory };
 }
