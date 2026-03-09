@@ -66,21 +66,20 @@ export const ShipUnit: React.FC<ShipUnitProps> = ({
   // For vertical: rotate 90° clockwise around center then the container
   // clips any overflow.
   const imgStyle: React.CSSProperties = isHorizontal
-    ? { 
-        width: imgW, 
-        height: imgH, 
+    ? {
+        width: imgW,
+        height: imgH,
         display: "block",
       }
     : {
-      
         width: imgW,
         height: imgH,
         position: "absolute",
         objectFit: "fill",
-        overflow:"visible", 
+        overflow: "visible",
         transformOrigin: "center center",
         transform: "rotate(90deg)",
-        maxWidth:"none"
+        maxWidth: "none",
       };
 
   return (

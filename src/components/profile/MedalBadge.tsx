@@ -8,6 +8,7 @@
 
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
+import { MedalIcon } from "lucide-react";
 
 export interface Medal {
   id: string;
@@ -105,7 +106,6 @@ export const MedalBadge: React.FC<MedalBadgeProps> = ({
   size = "md",
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
-
   const sizeClasses = {
     sm: "w-16 h-16 text-2xl",
     md: "w-20 h-20 text-3xl",
@@ -141,7 +141,7 @@ export const MedalBadge: React.FC<MedalBadgeProps> = ({
               showTooltip && medal.unlocked && "scale-110",
             )}
           >
-            {medal.icon}
+            { medal.icon}
           </span>
         </div>
 

@@ -34,6 +34,7 @@ import {
   useForfeitMutation,
   useMoveShipMutation,
 } from "@/hooks/queries/useMatchMutations";
+import { Anchor, Target, Wind, Zap } from "lucide-react";
 
 /**
  * Tipo adaptado que vem de adaptGameStateToEntity (page.tsx)
@@ -123,7 +124,7 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
   // Tanto o Player A quanto o Player B (convidado) recebem o modo correto.
   const isDynamicMode = match.gameMode === "Dynamic";
   // Compatível com localStorage como cache de escrita (opcional)
-  const setIsDynamicMode = (_: boolean) => {}; // no-op: modo é imutável em runtime
+  const setIsDynamicMode = (_: boolean) => { }; // no-op: modo é imutável em runtime
 
   const isMyTurn = match.isMyTurn;
   const isFinished = match.status === MatchStatus.FINISHED;
@@ -376,7 +377,6 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
           playVictory();
           addToast("Você venceu a batalha!", "victory", 5000);
         }, 2500); // 2500 ms = 2.5 segundos
-
       } else if (resolvedIsWinner === false) {
         // Opcional: Colocar um pequeno atraso dramático na derrota também
         setTimeout(() => {
@@ -432,14 +432,17 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
           {/* Stats compactas */}
           {match.stats && (
             <div className="flex justify-center gap-6 mt-4">
-              <div className="px-4 py-1.5 rounded-full bg-emerald-900/30 border border-emerald-700/40 text-emerald-400 text-sm font-mono">
-                🎯 {match.stats.myHits} acertos
+                <div className="px-4 py-1.5 flex items-center gap-2 rounded-full bg-emerald-900/30 border border-emerald-700/40 text-emerald-400 text-sm font-mono">
+                  <Target className="w-4 h-4" /> 
+                  <span>{match.stats.myHits} acertos</span> 
+                </div>
+              <div className="px-4 py-1.5 flex items-center gap-2 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-mono">
+                <Zap className="w-4 h-4"/>
+                <span>{match.stats.myStreak} sequência</span>  
               </div>
-              <div className="px-4 py-1.5 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-mono">
-                ⚡ {match.stats.myStreak} sequência
-              </div>
-              <div className="px-4 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/40 text-slate-400 text-sm font-mono">
-                💨 {match.stats.myMisses} erros
+              <div className="px-4 py-1.5 rounded-full  flex items-center gap-2 bg-slate-800/60 border border-slate-700/40 text-slate-400 text-sm font-mono">
+                <Wind className="w-4 h-4"></Wind>
+                <span>{match.stats.myMisses} erros</span>
               </div>
             </div>
           )}
@@ -473,7 +476,10 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
 
           {/* Meu Tabuleiro + Painel de Movimento */}
           <div className="flex flex-col items-center">
-            <h3 className="text-xl font-bold mb-4 text-slate-300 uppercase tracking-widest">⚓ Seu Tabuleiro</h3>
+            <h3 className="text-xl flex items-center align-center justify-center gap-2 font-bold mb-4 text-slate-300 uppercase tracking-widest">
+              <Anchor/>
+              <span>SEU TABULEIRO</span>
+            </h3>
             <Grid
               grid={myGrid}
               readOnly={true}
@@ -487,7 +493,7 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
               <div className="mt-4 w-full max-w-sm bg-slate-800/70 border border-slate-700 rounded-xl p-4 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-bold text-purple-400">
-                     Modo Dinâmico
+                    Modo Dinâmico
                   </span>
                   {hasMovedThisTurn && (
                     <span className="text-xs bg-green-700/40 text-green-300 px-2 py-0.5 rounded-full">
@@ -639,7 +645,11 @@ export default function BattlePhase({ match }: BattlePhaseProps) {
         {/* Status das Frotas */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 items-start">
           <FleetStatus ships={myShips} title="Sua Frota" />
-          <FleetStatus ships={opponentShips} title="Frota do Oponente" isOpponentFleet={true} />
+          <FleetStatus
+            ships={opponentShips}
+            title="Frota do Oponente"
+            isOpponentFleet={true}
+          />
         </div>
 
         {/* Controles */}
